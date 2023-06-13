@@ -11,13 +11,15 @@ local M = {}
 local prefer = require("infra.prefer")
 local strlib = require("infra.strlib")
 local vsel = require("infra.vsel")
-local jelly = require("infra.jellyfish")("comet", vim.log.levels.DEBUG)
+local jelly = require("infra.jellyfish")("comet")
+local fn = require("infra.fn")
 
 local api = vim.api
 
 ---@param cs string 'commentstring'
----@return string
+---@return string?
 local function resolve_comment_prefix(cs)
+  assert(cs ~= "")
   local socket_at = assert(strlib.find(cs, "%s"))
   return string.sub(cs, 1, socket_at - 1)
 end
@@ -27,8 +29,7 @@ end
 ---@param cprefix string @comment prefix
 ---@return string?
 local function to_comment_line(line, cs, cprefix)
-  if cs == "" then return jelly.debug("no proper &commentstring") end
-  if line == "" then return jelly.debug("blank line") end
+  assert(line ~= "" and cs ~= "")
 
   local indent = string.match(line, "^[ \t]*")
   if #indent == #line then return jelly.debug("blank line") end
@@ -48,8 +49,7 @@ end
 ---@param cprefix string @comment prefix
 ---@return string?
 local function to_uncomment_line(line, cs, cprefix)
-  if cs == "" then return jelly.debug("no proper &commentstring") end
-  if line == "" then return jelly.debug("blank line") end
+  assert(line ~= "" and cs ~= "")
 
   local indent = string.match(line, "^[ \t]*")
   if #indent == #line then return end -- blank line
@@ -74,8 +74,10 @@ do
       lnum = cursor[1] - 1
     end
     local cs = prefer.bo(bufnr, "commentstring")
+    if cs == "" then return jelly.warn("no proper &commentstring") end
     local cprefix = resolve_comment_prefix(cs)
     local line = assert(api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1])
+    if line == "" then return jelly.debug("blank line") end
 
     local processed = processor(line, cs, cprefix)
     if processed == nil then return end
@@ -92,18 +94,25 @@ do
     local range = vsel.range(bufnr)
     if range == nil then return end
     local cs = prefer.bo(bufnr, "commentstring")
+    if cs == "" then return jelly.warn("no proper &commentstring") end
     local cprefix = resolve_comment_prefix(cs)
 
-    local lines = {}
-    local changes = 0
-    for lnum = range.start_line, range.stop_line do
-      local line = assert(api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1])
+    local changed = false
+    local lines = fn.concrete(fn.map(function(line)
+      if line == "" then return "" end
       local processed = processor(line, cs, cprefix)
-      changes = changes + (processed == nil and 0 or 1)
-      table.insert(lines, processed or line)
+      if processed == nil then return line end
+      changed = true
+      return processed
+    end, api.nvim_buf_get_lines(bufnr, range.start_line, range.stop_line, false)))
+
+    if not changed then return jelly.debug("no changes") end
+
+    api.nvim_buf_set_lines(bufnr, range.start_line, range.stop_line, false, lines)
+    do -- dirty hack for: https://github.com/neovim/neovim/issues/24007
+      api.nvim_buf_set_mark(bufnr, "<", range.start_line + 1, range.start_col, {})
+      api.nvim_buf_set_mark(bufnr, ">", range.stop_line + 1 - 1, range.stop_col - 1, {})
     end
-    if changes == 0 then return end
-    api.nvim_buf_set_lines(bufnr, range.start_line, range.stop_line + 1, false, lines)
   end
 
   function M.comment_vselines() main(to_comment_line) end
