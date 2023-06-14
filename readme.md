@@ -1,11 +1,15 @@
 an opinionated comment plugin for neovim
 
+https://user-images.githubusercontent.com/6236829/245811764-e1ca06ee-519d-469e-ab10-093c67471566.mp4
+
 ## design choices
-* respects 'commentstring'
-   * but has no effects on `--xx`, `---xx` and `--[[` when &cms='-- %s'
+* honor 'commentstring' and 'expandtab'
+  * but has no effects on `--xx`, `---xx` and `--[[` when &cms='-- %s'
 * no relying on lsp nor treesitter
-* no toggle comment on/off
-* no multi-line comments
+* no toggle api
+* no multi-line comments: `/* .. */`
+* when commenting multiple lines, take the minimal indent within the line range
+  * this is mainly for python
 
 ## status
 * it just works (tm)
