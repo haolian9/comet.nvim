@@ -17,7 +17,7 @@ local fn = require("infra.fn")
 local api = vim.api
 
 ---@param cs string 'commentstring'
----@return string?
+---@return string
 local function resolve_comment_prefix(cs)
   assert(cs ~= "")
   local socket_at = assert(strlib.find(cs, "%s"))
@@ -37,7 +37,7 @@ local function to_comment_line(line, cs, cprefix)
   local commented
   do
     local rest = string.sub(line, #indent + 1)
-    if vim.startswith(rest, cprefix) then return jelly.debug("already commented") end
+    if strlib.startswith(rest, cprefix) then return jelly.debug("already commented") end
     commented = indent .. string.format(cs, rest)
   end
 
@@ -57,7 +57,7 @@ local function to_uncomment_line(line, cs, cprefix)
   local uncommented
   do
     local rest = string.sub(line, #indent + 1)
-    if not vim.startswith(rest, cprefix) then return jelly.debug("not commented") end
+    if not strlib.startswith(rest, cprefix) then return jelly.debug("not commented") end
     uncommented = indent .. string.sub(rest, #cprefix + 1)
   end
 
