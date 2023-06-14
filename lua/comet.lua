@@ -1,10 +1,14 @@
 -- design choices
+-- * honor 'commentstring' and 'expandtab'
 -- * no relying on lsp nor treesitter
--- * no toggle comment on/off
--- * no multi-line comments
+-- * no toggle api
+-- * no multi-line comments: /* .. */
+-- * when commenting multiple lines, take the minimal indent within the line range
+--   * this is mainly for python
 --
 -- limits:
--- * comment has no effects on `--xx`, `---xx` and `--[[` when &cms='-- %s'
+-- * has no effects on `--xx`, `---xx` and `--[[` when &cms='-- %s'
+-- * not works with lines dont respect 'expandtab'
 
 local M = {}
 
@@ -24,14 +28,30 @@ local function resolve_comment_prefix(cs)
   return string.sub(cs, 1, socket_at - 1)
 end
 
+---@type fun(bufnr: number): fun(line: string): string
+local IndentResolver
+do
+  local function tab(line)
+    if #line == 0 then return "" end
+    assert(not strlib.startswith(line, " "), "indent char should be tab")
+    return string.match(line, "^[\t]*")
+  end
+  local function space(line)
+    if #line == 0 then return "" end
+    assert(not strlib.startswith(line, "\t"), "indent char should be space")
+    return string.match(line, "^[ ]*")
+  end
+  function IndentResolver(bufnr) return prefer.bo(bufnr, "expandtab") and space or tab end
+end
+
 ---@param line string @line
----@param cs string @comment template
+---@param indent string @resolved intent of the line
+---@param cs string @comment string
 ---@param cprefix string @comment prefix
 ---@return string?
-local function to_comment_line(line, cs, cprefix)
+local function to_commented_line(line, indent, cs, cprefix)
   assert(line ~= "" and cs ~= "")
 
-  local indent = string.match(line, "^[ \t]*")
   if #indent == #line then return jelly.debug("blank line") end
 
   local commented
@@ -45,13 +65,13 @@ local function to_comment_line(line, cs, cprefix)
 end
 
 ---@param line string @line
+---@param indent string @resolved intent of the line
 ---@param cs string @comment template
 ---@param cprefix string @comment prefix
 ---@return string?
-local function to_uncomment_line(line, cs, cprefix)
+local function to_uncommented_line(line, indent, cs, cprefix)
   assert(line ~= "" and cs ~= "")
 
-  local indent = string.match(line, "^[ \t]*")
   if #indent == #line then return end -- blank line
 
   local uncommented
@@ -73,19 +93,28 @@ do
       local cursor = api.nvim_win_get_cursor(winid)
       lnum = cursor[1] - 1
     end
-    local cs = prefer.bo(bufnr, "commentstring")
-    if cs == "" then return jelly.warn("no proper &commentstring") end
-    local cprefix = resolve_comment_prefix(cs)
-    local line = assert(api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1])
-    if line == "" then return jelly.debug("blank line") end
 
-    local processed = processor(line, cs, cprefix)
+    local processed
+    do
+      local cs = prefer.bo(bufnr, "commentstring")
+      if #cs == 0 then return jelly.warn("no proper &commentstring") end
+
+      local cprefix = resolve_comment_prefix(cs)
+
+      local line = assert(api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1])
+      if #line == 0 then return jelly.debug("blank line") end
+
+      local indent = IndentResolver(bufnr)(line)
+
+      processed = processor(line, indent, cs, cprefix)
+    end
+
     if processed == nil then return end
     api.nvim_buf_set_lines(bufnr, lnum, lnum + 1, false, { processed })
   end
 
-  function M.comment_curline() main(to_comment_line) end
-  function M.uncomment_curline() main(to_uncomment_line) end
+  function M.comment_curline() main(to_commented_line) end
+  function M.uncomment_curline() main(to_uncommented_line) end
 end
 
 do
@@ -93,20 +122,41 @@ do
     local bufnr = api.nvim_get_current_buf()
     local range = vsel.range(bufnr)
     if range == nil then return end
-    local cs = prefer.bo(bufnr, "commentstring")
-    if cs == "" then return jelly.warn("no proper &commentstring") end
-    local cprefix = resolve_comment_prefix(cs)
 
-    local changed = false
-    local lines = fn.concrete(fn.map(function(line)
-      if line == "" then return "" end
-      local processed = processor(line, cs, cprefix)
-      if processed == nil then return line end
-      changed = true
-      return processed
-    end, api.nvim_buf_get_lines(bufnr, range.start_line, range.stop_line, false)))
+    local lines
+    do
+      local cs = prefer.bo(bufnr, "commentstring")
+      if #cs == 0 then return jelly.warn("no proper &commentstring") end
 
-    if not changed then return jelly.debug("no changes") end
+      local cprefix = resolve_comment_prefix(cs)
+
+      local held_lines = api.nvim_buf_get_lines(bufnr, range.start_line, range.stop_line, false)
+
+      local indent -- apply the minimal indent to all lines
+      do
+        local resolve_indent = IndentResolver(bufnr)
+        for line in fn.filter(function(line) return line ~= "" end, held_lines) do
+          if indent == nil then
+            indent = resolve_indent(line)
+          else
+            local this_indent = resolve_indent(line)
+            if #this_indent < #indent then indent = this_indent end
+          end
+        end
+      end
+
+      local changed = false
+
+      lines = fn.concrete(fn.map(function(line)
+        if #line == 0 then return "" end
+        local processed = processor(line, indent, cs, cprefix)
+        if processed == nil then return line end
+        changed = true
+        return processed
+      end, held_lines))
+
+      if not changed then return jelly.debug("no changes") end
+    end
 
     api.nvim_buf_set_lines(bufnr, range.start_line, range.stop_line, false, lines)
     do -- dirty hack for: https://github.com/neovim/neovim/issues/24007
@@ -115,8 +165,8 @@ do
     end
   end
 
-  function M.comment_vselines() main(to_comment_line) end
-  function M.uncomment_vselines() main(to_uncomment_line) end
+  function M.comment_vselines() main(to_commented_line) end
+  function M.uncomment_vselines() main(to_uncommented_line) end
 end
 
 return M
