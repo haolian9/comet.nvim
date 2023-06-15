@@ -29,3 +29,6 @@ m.n("gC", function() require("comet").uncomment_curline() end)
 m.v("gc", [[:lua require("comet").comment_vselines()<cr>]])
 m.v("gC", [[:lua require("comet").uncomment_vselines()<cr>]])
 ```
+
+## thanks
+[commentary](https://github.com/tpope/vim-commentary) was always the friend of mine to comment/uncomment. i also drew the most ideasfrom it to form this plugin.
