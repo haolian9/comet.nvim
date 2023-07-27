@@ -12,11 +12,11 @@
 
 local M = {}
 
+local fn = require("infra.fn")
+local jelly = require("infra.jellyfish")("comet")
 local prefer = require("infra.prefer")
 local strlib = require("infra.strlib")
 local vsel = require("infra.vsel")
-local jelly = require("infra.jellyfish")("comet")
-local fn = require("infra.fn")
 
 local api = vim.api
 
