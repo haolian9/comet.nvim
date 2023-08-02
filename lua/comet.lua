@@ -147,7 +147,7 @@ do
 
       local changed = false
 
-      lines = fn.concrete(fn.map(function(line)
+      lines = fn.tolist(fn.map(function(line)
         if #line == 0 then return "" end
         local processed = processor(line, indent, cs, cprefix)
         if processed == nil then return line end
