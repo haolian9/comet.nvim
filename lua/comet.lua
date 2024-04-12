@@ -12,6 +12,7 @@
 
 local M = {}
 
+local buflines = require("infra.buflines")
 local fn = require("infra.fn")
 local jelly = require("infra.jellyfish")("comet")
 local prefer = require("infra.prefer")
@@ -101,7 +102,7 @@ do
 
       local cprefix = resolve_comment_prefix(cs)
 
-      local line = assert(api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1])
+      local line = assert(buflines.line(bufnr, lnum))
       if #line == 0 then return jelly.debug("blank line") end
 
       local indent = IndentResolver(bufnr)(line)
@@ -110,7 +111,7 @@ do
     end
 
     if processed == nil then return end
-    api.nvim_buf_set_lines(bufnr, lnum, lnum + 1, false, { processed })
+    buflines.replace(bufnr, lnum, processed)
   end
 
   function M.comment_curline() main(to_commented_line) end
@@ -130,7 +131,7 @@ do
 
       local cprefix = resolve_comment_prefix(cs)
 
-      local held_lines = api.nvim_buf_get_lines(bufnr, range.start_line, range.stop_line, false)
+      local held_lines = buflines.lines(bufnr, range.start_line, range.stop_line)
 
       local indent -- apply the minimal indent to all lines
       do
@@ -158,7 +159,7 @@ do
       if not changed then return jelly.debug("no changes") end
     end
 
-    api.nvim_buf_set_lines(bufnr, range.start_line, range.stop_line, false, lines)
+    buflines.replaces(bufnr, range.start_line, range.stop_line, lines)
     do -- dirty hack for: https://github.com/neovim/neovim/issues/24007
       api.nvim_buf_set_mark(bufnr, "<", range.start_line + 1, range.start_col, {})
       api.nvim_buf_set_mark(bufnr, ">", range.stop_line + 1 - 1, range.stop_col - 1, {})
