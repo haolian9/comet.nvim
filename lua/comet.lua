@@ -33,12 +33,12 @@ end
 local IndentResolver
 do
   local function tab(line)
-    if #line == 0 then return "" end
+    if line == "" then return "" end
     assert(not strlib.startswith(line, " "), "indent char should be tab")
     return string.match(line, "^[\t]*")
   end
   local function space(line)
-    if #line == 0 then return "" end
+    if line == "" then return "" end
     assert(not strlib.startswith(line, "\t"), "indent char should be space")
     return string.match(line, "^[ ]*")
   end
@@ -98,12 +98,12 @@ do
     local processed
     do
       local cs = prefer.bo(bufnr, "commentstring")
-      if #cs == 0 then return jelly.warn("no proper &commentstring") end
+      if cs == "" then return jelly.warn("no proper &commentstring") end
 
       local cprefix = resolve_comment_prefix(cs)
 
       local line = assert(buflines.line(bufnr, lnum))
-      if #line == 0 then return jelly.debug("blank line") end
+      if line == "" then return jelly.debug("blank line") end
 
       local indent = IndentResolver(bufnr)(line)
 
@@ -127,7 +127,7 @@ do
     local lines
     do
       local cs = prefer.bo(bufnr, "commentstring")
-      if #cs == 0 then return jelly.warn("no proper &commentstring") end
+      if cs == "" then return jelly.warn("no proper &commentstring") end
 
       local cprefix = resolve_comment_prefix(cs)
 
@@ -149,7 +149,7 @@ do
       local changed = false
 
       lines = fn.tolist(fn.map(function(line)
-        if #line == 0 then return "" end
+        if line == "" then return "" end
         local processed = processor(line, indent, cs, cprefix)
         if processed == nil then return line end
         changed = true
