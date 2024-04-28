@@ -35,12 +35,12 @@ do
   local function tab(line)
     if line == "" then return "" end
     assert(not strlib.startswith(line, " "), "indent char should be tab")
-    return string.match(line, "^[\t]*")
+    return select(1, string.match(line, "^[\t]*"))
   end
   local function space(line)
     if line == "" then return "" end
     assert(not strlib.startswith(line, "\t"), "indent char should be space")
-    return string.match(line, "^[ ]*")
+    return select(1, string.match(line, "^[ ]*"))
   end
   function IndentResolver(bufnr) return prefer.bo(bufnr, "expandtab") and space or tab end
 end
@@ -55,14 +55,9 @@ local function to_commented_line(line, indent, cs, cprefix)
 
   if #indent == #line then return jelly.debug("blank line") end
 
-  local commented
-  do
-    local rest = string.sub(line, #indent + 1)
-    if strlib.startswith(rest, cprefix) then return jelly.debug("already commented") end
-    commented = indent .. string.format(cs, rest)
-  end
-
-  return commented
+  local rest = string.sub(line, #indent + 1)
+  if strlib.startswith(rest, cprefix) then return jelly.debug("already commented") end
+  return indent .. string.format(cs, rest)
 end
 
 ---@param line string @line
@@ -73,16 +68,11 @@ end
 local function to_uncommented_line(line, indent, cs, cprefix)
   assert(line ~= "" and cs ~= "")
 
-  if #indent == #line then return end -- blank line
+  if #indent == #line then return jelly.debug("blank line") end
 
-  local uncommented
-  do
-    local rest = string.sub(line, #indent + 1)
-    if not strlib.startswith(rest, cprefix) then return jelly.debug("not commented") end
-    uncommented = indent .. string.sub(rest, #cprefix + 1)
-  end
-
-  return uncommented
+  local rest = string.sub(line, #indent + 1)
+  if not strlib.startswith(rest, cprefix) then return jelly.debug("not commented") end
+  return indent .. string.sub(rest, #cprefix + 1)
 end
 
 do
