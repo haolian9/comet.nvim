@@ -13,6 +13,7 @@
 local M = {}
 
 local buflines = require("infra.buflines")
+local wincursor = require("infra.wincursor")
 local fn = require("infra.fn")
 local jelly = require("infra.jellyfish")("comet")
 local prefer = require("infra.prefer")
@@ -77,13 +78,9 @@ end
 
 do
   local function main(processor)
-    local bufnr, lnum
-    do
-      local winid = api.nvim_get_current_win()
-      bufnr = api.nvim_win_get_buf(winid)
-      local cursor = api.nvim_win_get_cursor(winid)
-      lnum = cursor[1] - 1
-    end
+    local winid = api.nvim_get_current_win()
+    local bufnr = api.nvim_win_get_buf(winid)
+    local lnum = wincursor.lnum(winid)
 
     local processed
     do
