@@ -13,12 +13,12 @@
 local M = {}
 
 local buflines = require("infra.buflines")
-local wincursor = require("infra.wincursor")
-local fn = require("infra.fn")
+local itertools = require("infra.itertools")
 local jelly = require("infra.jellyfish")("comet")
 local prefer = require("infra.prefer")
 local strlib = require("infra.strlib")
 local vsel = require("infra.vsel")
+local wincursor = require("infra.wincursor")
 
 local api = vim.api
 
@@ -123,7 +123,7 @@ do
       local indent -- apply the minimal indent to all lines
       do
         local resolve_indent = IndentResolver(bufnr)
-        for line in fn.filter(function(line) return line ~= "" end, held_lines) do
+        for line in itertools.filter(function(line) return line ~= "" end, held_lines) do
           if indent == nil then
             indent = resolve_indent(line)
           else
@@ -135,7 +135,7 @@ do
 
       local changed = false
 
-      lines = fn.tolist(fn.map(function(line)
+      lines = itertools.tolist(itertools.map(function(line)
         if line == "" then return "" end
         local processed = processor(line, indent, cs, cprefix)
         if processed == nil then return line end
