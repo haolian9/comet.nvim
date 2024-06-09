@@ -14,6 +14,7 @@ local M = {}
 
 local buflines = require("infra.buflines")
 local itertools = require("infra.itertools")
+local its = require("infra.its")
 local jelly = require("infra.jellyfish")("comet")
 local prefer = require("infra.prefer")
 local strlib = require("infra.strlib")
@@ -135,13 +136,15 @@ do
 
       local changed = false
 
-      lines = itertools.tolist(itertools.map(function(line)
-        if line == "" then return "" end
-        local processed = processor(line, indent, cs, cprefix)
-        if processed == nil then return line end
-        changed = true
-        return processed
-      end, held_lines))
+      lines = its(held_lines) --
+        :map(function(line)
+          if line == "" then return "" end
+          local processed = processor(line, indent, cs, cprefix)
+          if processed == nil then return line end
+          changed = true
+          return processed
+        end)
+        :tolist()
 
       if not changed then return jelly.debug("no changes") end
     end
