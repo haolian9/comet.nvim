@@ -16,12 +16,11 @@ local buflines = require("infra.buflines")
 local itertools = require("infra.itertools")
 local its = require("infra.its")
 local jelly = require("infra.jellyfish")("comet")
+local ni = require("infra.ni")
 local prefer = require("infra.prefer")
 local strlib = require("infra.strlib")
 local vsel = require("infra.vsel")
 local wincursor = require("infra.wincursor")
-
-local api = vim.api
 
 ---@param cs string 'commentstring'
 ---@return string
@@ -79,8 +78,8 @@ end
 
 do
   local function main(processor)
-    local winid = api.nvim_get_current_win()
-    local bufnr = api.nvim_win_get_buf(winid)
+    local winid = ni.get_current_win()
+    local bufnr = ni.win_get_buf(winid)
     local lnum = wincursor.lnum(winid)
 
     local processed
@@ -108,7 +107,7 @@ end
 
 do
   local function main(processor)
-    local bufnr = api.nvim_get_current_buf()
+    local bufnr = ni.get_current_buf()
     local range = vsel.range(bufnr)
     if range == nil then return end
 
@@ -151,8 +150,8 @@ do
 
     buflines.replaces(bufnr, range.start_line, range.stop_line, lines)
     do -- dirty hack for: https://github.com/neovim/neovim/issues/24007
-      api.nvim_buf_set_mark(bufnr, "<", range.start_line + 1, range.start_col, {})
-      api.nvim_buf_set_mark(bufnr, ">", range.stop_line + 1 - 1, range.stop_col - 1, {})
+      ni.buf_set_mark(bufnr, "<", range.start_line + 1, range.start_col, {})
+      ni.buf_set_mark(bufnr, ">", range.stop_line + 1 - 1, range.stop_col - 1, {})
     end
   end
 
