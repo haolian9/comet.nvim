@@ -149,10 +149,7 @@ do
     end
 
     buflines.replaces(bufnr, range.start_line, range.stop_line, lines)
-    do -- dirty hack for: https://github.com/neovim/neovim/issues/24007
-      ni.buf_set_mark(bufnr, "<", range.start_line + 1, range.start_col, {})
-      ni.buf_set_mark(bufnr, ">", range.stop_line + 1 - 1, range.stop_col - 1, {})
-    end
+    vsel.restore_gv(bufnr, range)
   end
 
   function M.comment_vselines() main(to_commented_line) end
