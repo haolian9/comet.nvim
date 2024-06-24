@@ -123,7 +123,7 @@ do
       local indent -- apply the minimal indent to all lines
       do
         local resolve_indent = IndentResolver(bufnr)
-        for line in itertools.filter(function(line) return line ~= "" end, held_lines) do
+        for line in itertools.filter(held_lines, function(line) return line ~= "" end) do
           if indent == nil then
             indent = resolve_indent(line)
           else
