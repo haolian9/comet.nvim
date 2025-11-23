@@ -8,15 +8,15 @@ https://user-images.githubusercontent.com/6236829/245811764-e1ca06ee-519d-469e-a
 * no relying on lsp nor treesitter
 * no toggle api
 * no multi-line comments: `/* .. */`
-* when commenting multiple lines, take the minimal indent within the line range
-  * this is mainly for python
+* the minimal depth indent wins
 
 ## status
 * it just works (tm)
-* it is feature-freezed
+* it is feature-frozen
 
 ## prerequisites
-* neovim 0.9.*
+* linux
+* neovim 0.11.*
 * haolian9/infra.nvim
 
 ## usage
@@ -31,4 +31,4 @@ m.v("gC", [[:lua require("comet").uncomment_vselines()<cr>]])
 ```
 
 ## thanks
-[commentary](https://github.com/tpope/vim-commentary) was always the friend of mine to comment/uncomment. i also drew the most ideasfrom it to form this plugin.
+[commentary](https://github.com/tpope/vim-commentary), my good old friend.
