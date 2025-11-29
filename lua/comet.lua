@@ -1,19 +1,23 @@
 -- design choices
 -- * honor 'commentstring' and 'expandtab'
+--   * but expect cms='{prefix} %s', no '/* %s */'
 -- * no relying on lsp nor treesitter
 -- * no toggle api
--- * no multi-line comments: /* .. */
--- * when commenting multiple lines, take the minimal indent within the line range
---   * this is mainly for python
+-- * no support: /* ... */
+-- * when commenting multiple lines, the smallest indent wins
+-- * opinionated fallback &cms
 --
 -- limits:
 -- * has no effects on `--xx`, `---xx` and `--[[` when &cms='-- %s'
 -- * not works with lines dont respect 'expandtab'
+--
+-- tried vim.regex to avoid copying lines with failure
+-- * can resolve indent with vim.regex() and copy-free
+-- * but found no easy way to detect if a line is (un)commented: regex(escape(cms-prefix))
 
 local M = {}
 
 local buflines = require("infra.buflines")
-local itertools = require("infra.itertools")
 local its = require("infra.its")
 local jelly = require("infra.jellyfish")("comet")
 local ni = require("infra.ni")
@@ -22,12 +26,17 @@ local strlib = require("infra.strlib")
 local vsel = require("infra.vsel")
 local wincursor = require("infra.wincursor")
 
----@param cs string 'commentstring'
----@return string
-local function resolve_comment_prefix(cs)
-  assert(cs ~= "")
-  local socket_at = assert(strlib.find(cs, "%s"))
-  return string.sub(cs, 1, socket_at - 1)
+---@param bufnr integer
+---@return string cms
+---@return string cma
+local function resolve_cms_with_fallback(bufnr)
+  local cms = prefer.bo(bufnr, "commentstring")
+  if cms == "" then return "# %s", "# " end
+
+  local cma, cme = unpack(strlib.splits(cms, "%s", 1))
+  assert(cma ~= "")
+  if cme ~= "" then error("not supported &cms") end
+  return cms, cma
 end
 
 ---@type fun(bufnr: number): fun(line: string): string
@@ -46,34 +55,34 @@ do
   function IndentResolver(bufnr) return prefer.bo(bufnr, "expandtab") and space or tab end
 end
 
----@param line string @line
----@param indent string @resolved intent of the line
----@param cs string @comment string
----@param cprefix string @comment prefix
+---@param line string
+---@param indent string
+---@param cms string
+---@param cma string @comment prefix
 ---@return string?
-local function to_commented_line(line, indent, cs, cprefix)
-  assert(line ~= "" and cs ~= "")
+local function to_commented_line(line, indent, cms, cma)
+  assert(line ~= "" and cms ~= "")
 
   if #indent == #line then return jelly.debug("blank line") end
 
   local rest = string.sub(line, #indent + 1)
-  if strlib.startswith(rest, cprefix) then return jelly.debug("already commented") end
-  return indent .. string.format(cs, rest)
+  if strlib.startswith(rest, cma) then return jelly.debug("already commented") end
+  return indent .. string.format(cms, rest)
 end
 
----@param line string @line
----@param indent string @resolved intent of the line
----@param cs string @comment template
----@param cprefix string @comment prefix
+---@param line string
+---@param indent string
+---@param cms string
+---@param cma string @comment prefix
 ---@return string?
-local function to_uncommented_line(line, indent, cs, cprefix)
-  assert(line ~= "" and cs ~= "")
+local function to_uncommented_line(line, indent, cms, cma)
+  assert(line ~= "" and cms ~= "")
 
   if #indent == #line then return jelly.debug("blank line") end
 
   local rest = string.sub(line, #indent + 1)
-  if not strlib.startswith(rest, cprefix) then return jelly.debug("not commented") end
-  return indent .. string.sub(rest, #cprefix + 1)
+  if not strlib.startswith(rest, cma) then return jelly.debug("not commented") end
+  return indent .. string.sub(rest, #cma + 1)
 end
 
 do
@@ -82,23 +91,17 @@ do
     local bufnr = ni.win_get_buf(winid)
     local lnum = wincursor.lnum(winid)
 
-    local processed
+    local result
     do
-      local cs = prefer.bo(bufnr, "commentstring")
-      if cs == "" then return jelly.warn("no proper &commentstring") end
-
-      local cprefix = resolve_comment_prefix(cs)
-
+      local cms, cma = resolve_cms_with_fallback(bufnr)
       local line = assert(buflines.line(bufnr, lnum))
-      if line == "" then return jelly.debug("blank line") end
-
+      if line == "" then return end
       local indent = IndentResolver(bufnr)(line)
-
-      processed = processor(line, indent, cs, cprefix)
+      result = processor(line, indent, cms, cma)
     end
 
-    if processed == nil then return end
-    buflines.replace(bufnr, lnum, processed)
+    if result == nil then return end
+    buflines.replace(bufnr, lnum, result)
   end
 
   function M.comment_curline() main(to_commented_line) end
@@ -111,44 +114,39 @@ do
     local range = vsel.range(bufnr)
     if range == nil then return end
 
-    local lines
+    local results, changed
     do
-      local cs = prefer.bo(bufnr, "commentstring")
-      if cs == "" then return jelly.warn("no proper &commentstring") end
+      local cms, cma = resolve_cms_with_fallback(bufnr)
+      local lines = buflines.lines(bufnr, range.start_line, range.stop_line)
 
-      local cprefix = resolve_comment_prefix(cs)
-
-      local held_lines = buflines.lines(bufnr, range.start_line, range.stop_line)
-
-      local indent -- apply the minimal indent to all lines
-      do
+      local indent
+      do --find the smallest indent
         local resolve_indent = IndentResolver(bufnr)
-        for line in itertools.filter(held_lines, function(line) return line ~= "" end) do
-          if indent == nil then
-            indent = resolve_indent(line)
-          else
+        for _, line in ipairs(lines) do
+          if line == "" then goto continue end
+          if indent then
             local this_indent = resolve_indent(line)
             if #this_indent < #indent then indent = this_indent end
+          else
+            indent = resolve_indent(line)
           end
+          ::continue::
         end
       end
 
-      local changed = false
-
-      lines = its(held_lines) --
+      results = its(lines)
         :map(function(line)
           if line == "" then return "" end
-          local processed = processor(line, indent, cs, cprefix)
-          if processed == nil then return line end
+          local result = processor(line, indent, cms, cma)
+          if result == nil then return line end
           changed = true
-          return processed
+          return result
         end)
         :tolist()
-
-      if not changed then return jelly.debug("no changes") end
     end
 
-    buflines.replaces(bufnr, range.start_line, range.stop_line, lines)
+    if not changed then return jelly.debug("no changes") end
+    buflines.replaces(bufnr, range.start_line, range.stop_line, results)
     vsel.restore_gv(bufnr, range)
   end
 
